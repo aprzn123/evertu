@@ -1,68 +1,51 @@
-use chrono::{DateTime, Local};
-use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Local, Utc, TimeZone};
+use chrono::serde::ts_seconds_option;
+use serde::{Serialize, Deserialize, Serializer, Deserializer};
 
-// Represents a single todo item in a form that can be serialized by Serde
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct SerialTodo {
-    name:       String,
-    desc:       String,
-    done:       bool,
-    do_at:      Option<String>, // Dates serialized as DateTime.to_rfc3339
-    do_by:      Option<String>,
-    ignore_by:  Option<String>
+pub fn serialize_local_dt<S>
+    (dt: &Option<DateTime<Local>>, serializer: S) 
+    -> Result<S::Ok, S::Error> 
+    where S: Serializer 
+{
+    ts_seconds_option::serialize(
+        &dt.map(|loc| 
+            Utc.from_local_datetime(&loc.naive_local()).single().unwrap()
+        ), 
+        serializer
+    )
 }
 
-// Represents a single todo item in a form that is more understandable to the software
-#[derive(Clone, PartialEq, Debug)]
+pub fn deserialize_local_dt<'de, D>(deserializer: D) 
+    -> Result<Option<DateTime<Local>>, D::Error> 
+    where D: Deserializer<'de>
+{
+    ts_seconds_option::deserialize(deserializer).map(
+        |opt| opt.map(
+            |utc| Local.from_utc_datetime(&utc.naive_utc())
+        )
+    )
+}
+
+// Represents a single todo item
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Todo {
     name:       String,
     desc:       String,
     done:       bool,
+    #[serde(serialize_with = "serialize_local_dt", deserialize_with = "deserialize_local_dt")]
     do_at:      Option<DateTime<Local>>,
+    #[serde(serialize_with = "serialize_local_dt", deserialize_with = "deserialize_local_dt")]
     do_by:      Option<DateTime<Local>>,
+    #[serde(serialize_with = "serialize_local_dt", deserialize_with = "deserialize_local_dt")]
     ignore_by:  Option<DateTime<Local>>
-}
-
-impl From<Todo> for SerialTodo {
-    fn from(todo: Todo) -> Self {
-        Self {
-            name:       todo.name,
-            desc:       todo.desc,
-            done:       todo.done,
-            do_at:      todo.do_at.map(|datetime: DateTime<Local>| datetime.to_rfc3339()),
-            do_by:      todo.do_by.map(|datetime: DateTime<Local>| datetime.to_rfc3339()),
-            ignore_by:  todo.ignore_by.map(|datetime: DateTime<Local>| datetime.to_rfc3339()),
-        }
-    }
-}
-
-impl From<SerialTodo> for Todo {
-    fn from(todo: SerialTodo) -> Self {
-        Self {
-            name:       todo.name,
-            desc:       todo.desc,
-            done:       todo.done,
-            do_at:      todo.do_at.map(|datetime_str: String| DateTime::parse_from_rfc3339(datetime_str.as_str())
-                                                                       .expect("Bad Date Formatting!")
-                                                                       .with_timezone(&Local)),
-
-            do_by:      todo.do_by.map(|datetime_str: String| DateTime::parse_from_rfc3339(datetime_str.as_str())
-                                                                       .expect("Bad Date Formatting!")
-                                                                       .with_timezone(&Local)),
-
-            ignore_by:  todo.ignore_by.map(|datetime_str: String| DateTime::parse_from_rfc3339(datetime_str.as_str())
-                                                                           .expect("Bad Date Formatting!")
-                                                                           .with_timezone(&Local)),
-        }
-    }
 }
 
 impl Todo {
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(&SerialTodo::from(self.clone()))
+        serde_json::to_string(self)
     }
     pub fn from_json(json: String) -> Result<Self, serde_json::Error> {
-        serde_json::from_str::<SerialTodo>(json.as_str()).map(|x|Todo::from(x))
+        serde_json::from_str(json.as_str())
     }
     pub fn new(name: String, desc: String) -> Self {
         Self {
@@ -89,27 +72,6 @@ impl Todo {
 
 
 #[derive(Debug, Serialize, Deserialize)]
-struct SerialProgramData {
-    tasks: Vec<SerialTodo>
-}
-
-#[derive(Debug)]
 pub struct ProgramData {
     tasks: Vec<Todo>
-}
-
-impl From<ProgramData> for SerialProgramData {
-    fn from(data: ProgramData) -> Self {
-        Self {
-            tasks: data.tasks.iter().map(|x| SerialTodo::from(x.clone())).collect()
-        }
-    }
-}
-
-impl From<SerialProgramData> for ProgramData {
-    fn from(data: SerialProgramData) -> Self {
-        Self {
-            tasks: data.tasks.iter().map(|x| Todo::from(x.clone())).collect()
-        }
-    }
 }
