@@ -1,5 +1,4 @@
-use chrono::{DateTime, Local, Utc, TimeZone};
-use chrono::serde::ts_seconds_option;
+use chrono::{DateTime, Local, Utc, TimeZone, serde::ts_seconds_option};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 
 pub fn serialize_local_dt<S>
