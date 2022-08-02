@@ -66,6 +66,10 @@ impl Todo {
     pub fn ignore_by(&mut self, datetime: DateTime<Local>) {
         self.ignore_by = Some(datetime);
     }
+
+    pub fn get_name(&self) -> String { self.name.clone() }
+    pub fn get_desc(&self) -> String { self.desc.clone() }
+    pub fn is_done(&self) -> bool { self.done }
 }
 
 

@@ -23,22 +23,29 @@ enum Event<I> {
    Tick
 }
 
+#[derive(Clone)]
 enum Tab {
     Tasks,
     NewTask
 }
 
-impl From<Tab> for usize {
-    fn from(input: Tab) -> usize {
+impl From<&Tab> for usize {
+    fn from(input: &Tab) -> usize {
         match input {
-            Tasks => 0,
-            NewTask => 1
+            Tab::Tasks => 0,
+            Tab::NewTask => 1
         }
     }
 }
 
+fn task_view_widget(task: &Todo) -> Paragraph {
+    Paragraph::new( vec![
+        Spans::from(vec![Span::raw("Text Goes Here")])
+    ])
+}
+
 fn main() {
-    // let test_todo = Todo::new(String::from("Stuff"), String::from("Do stuff and things and more stuff"));
+    let test_todo = Todo::new(String::from("Stuff"), String::from("Do stuff and things and more stuff"));
     // println!("{}", test_todo.to_json().unwrap());
 
     // Input mode
@@ -74,21 +81,23 @@ fn main() {
     let mut terminal = Terminal::new(backend).expect("Failed to create terminal");
     terminal.clear().expect("Terminal clearing failed");
 
+    let mut current_tab = Tab::Tasks;
+    let mut focused_task_index: Option<i32> = None;
     // Rendering Loop
     loop {
         terminal.draw(|rect| {
             let size = rect.size();
             let chunks = Layout::default()
-                .direction(Direction::Horizontal)
+                .direction(Direction::Vertical)
                 .margin(2)
                 .constraints(
                     [
-                        Constraint::Percentage(20),
-                        Constraint::Percentage(80)
+                        Constraint::Length(3),
+                        Constraint::Min(2)
                     ].as_ref()
                 ).split(size);
             
-            // let test_task = Paragraph::new("To-Do: Many Things")
+            // let test_task = Paragraph::new(usize::from(current_tab.clone()).to_string())
             //     .style(Style::default().fg(Color::Blue))
             //     .alignment(Alignment::Left)
             //     .block(Block::default()
@@ -99,7 +108,6 @@ fn main() {
             //     );
             
             let menu_titles = vec!["Task View", "New Task"];
-            let mut current_tab = Tab::Tasks;
 
             let menu = menu_titles.iter().map(|title| {
                 Spans::from(vec![
@@ -111,17 +119,22 @@ fn main() {
             }).collect();
                 
             let tabs = Tabs::new(menu)
-                                                .select(current_tab.into())
-                                                .highlight_style(Style::default()
-                                                    .fg(Color::Green)
-                                                    .add_modifier(Modifier::BOLD)
-                                                    .add_modifier(Modifier::UNDERLINED)
-                                                ).block(Block::default()
-                                                    .borders(Borders::all())
-                                                    .border_type(BorderType::Rounded)
-                                                );
+                                    .select((&current_tab).into())
+                                    .highlight_style(Style::default()
+                                        .fg(Color::Green)
+                                        .add_modifier(Modifier::BOLD)
+                                        .add_modifier(Modifier::UNDERLINED)
+                                    ).block(Block::default()
+                                        .borders(Borders::all())
+                                        .border_type(BorderType::Rounded)
+                                    );
 
-            rect.render_widget(tabs, chunks[1]);
+            rect.render_widget(tabs, chunks[0]);
+
+            match current_tab {
+                Tab::Tasks => rect.render_widget(task_view_widget(&test_todo), chunks[1]),
+                Tab::NewTask => { }
+            }
         }).unwrap();
 
         // Do stuff with user input
@@ -133,6 +146,8 @@ fn main() {
                     terminal.show_cursor().unwrap();
                     break;
                 },
+                event::KeyCode::Char('h') => current_tab = Tab::Tasks,
+                event::KeyCode::Char('c') => current_tab = Tab::NewTask,
                 _ => {}
             },
             Event::Tick => {}
