@@ -40,7 +40,20 @@ impl From<&Tab> for usize {
 
 fn task_view_widget(task: &Todo) -> Paragraph {
     Paragraph::new( vec![
-        Spans::from(vec![Span::raw("Text Goes Here")])
+        Spans::from(vec![Span::styled(
+            task.get_name(),
+            Style::default().add_modifier(Modifier::BOLD).fg(Color::Blue)
+        )]),
+        Spans::from(vec![if task.is_done() 
+                        {Span::styled("Completed", Style::default().fg(Color::Green))} 
+                   else {Span::styled("Not Completed", Style::default().fg(Color::Red))}
+        ]),
+        Spans::from(vec![match task.get_do_by() {
+            None => Span::styled("No Due Date", Style::default().fg(Color::LightBlue)),
+            Some(date) => Span::raw(format!("Due on {} at {}", date.date().to_string(), date.time().to_string()))
+        }]),
+        Spans::from(vec![Span::raw("")]),
+        Spans::from(vec![Span::raw(task.get_desc())])
     ])
 }
 
@@ -113,7 +126,7 @@ fn main() {
                 Spans::from(vec![
                     Span::styled(
                         *title,
-                        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+                        Style::default().fg(Color::Yellow)
                     )
                 ])
             }).collect();
@@ -121,7 +134,6 @@ fn main() {
             let tabs = Tabs::new(menu)
                                     .select((&current_tab).into())
                                     .highlight_style(Style::default()
-                                        .fg(Color::Green)
                                         .add_modifier(Modifier::BOLD)
                                         .add_modifier(Modifier::UNDERLINED)
                                     ).block(Block::default()

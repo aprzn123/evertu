@@ -70,6 +70,9 @@ impl Todo {
     pub fn get_name(&self) -> String { self.name.clone() }
     pub fn get_desc(&self) -> String { self.desc.clone() }
     pub fn is_done(&self) -> bool { self.done }
+    pub fn get_do_at(&self) -> Option<DateTime<Local>> { self.do_at.clone() }
+    pub fn get_do_by(&self) -> Option<DateTime<Local>> { self.do_by.clone() }
+    pub fn get_ignore_by(&self) -> Option<DateTime<Local>> { self.ignore_by.clone() }
 }
 
 
