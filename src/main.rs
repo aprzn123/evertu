@@ -3,7 +3,7 @@
 
 
 mod todo;
-use chrono::{Duration, DateTime, Utc};
+use chrono::{Duration, DateTime, Utc, Local, TimeZone};
 use crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 use crossterm::event;
 use todo::Todo;
@@ -42,23 +42,34 @@ fn task_view_widget(task: &Todo) -> Paragraph {
     Paragraph::new( vec![
         Spans::from(vec![Span::styled(
             task.get_name(),
-            Style::default().add_modifier(Modifier::BOLD).fg(Color::Blue)
+            Style::default().add_modifier(Modifier::BOLD).add_modifier(Modifier::UNDERLINED).fg(Color::Blue)
         )]),
         Spans::from(vec![if task.is_done() 
-                        {Span::styled("Completed", Style::default().fg(Color::Green))} 
-                   else {Span::styled("Not Completed", Style::default().fg(Color::Red))}
+                        {Span::styled("Completed", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))} 
+                   else {Span::styled("Not Completed", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))}
         ]),
-        Spans::from(vec![match task.get_do_by() {
-            None => Span::styled("No Due Date", Style::default().fg(Color::LightBlue)),
-            Some(date) => Span::raw(format!("Due on {} at {}", date.date().to_string(), date.time().to_string()))
+        Spans::from(vec![if let Some(due_date) = task.get_do_by() {
+            Span::styled(due_date.format("Due on %b %d, %Y at %H:%M").to_string(), 
+            Style::default().fg(if due_date < Local::now() && !task.is_done() {Color::Red} 
+                                else {Color::Green}))
+        } else {
+            Span::styled("No due date set", Style::default().fg(Color::DarkGray))
         }]),
         Spans::from(vec![Span::raw("")]),
-        Spans::from(vec![Span::raw(task.get_desc())])
+        Spans::from(vec![Span::raw(task.get_desc())]),
+        Spans::from(vec![Span::raw("")]),
+        Spans::from(vec![if let Some(do_date) = task.get_do_at() {
+            Span::styled(do_date.format("Scheduled for %b %d, %Y at %H:%M").to_string(), 
+            Style::default().fg(if do_date < Local::now() && !task.is_done() {Color::Red} 
+                                else {Color::Green}))
+        } else {
+            Span::styled("No date scheduled", Style::default().fg(Color::DarkGray))
+        }]),
     ])
 }
 
 fn main() {
-    let test_todo = Todo::new(String::from("Stuff"), String::from("Do stuff and things and more stuff"));
+    let test_todo = Todo::new(String::from("Stuff"), String::from("Do stuff and things and more stuff")).do_by(Local.timestamp(1431648000, 0));
     // println!("{}", test_todo.to_json().unwrap());
 
     // Input mode
@@ -159,7 +170,7 @@ fn main() {
                     break;
                 },
                 event::KeyCode::Char('h') => current_tab = Tab::Tasks,
-                event::KeyCode::Char('c') => current_tab = Tab::NewTask,
+                event::KeyCode::Char('N') => current_tab = Tab::NewTask,
                 _ => {}
             },
             Event::Tick => {}

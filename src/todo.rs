@@ -57,14 +57,35 @@ impl Todo {
         }
     }
 
-    pub fn do_at(&mut self, datetime: DateTime<Local>) {
-        self.do_at = Some(datetime);
+    pub fn do_at(&self, datetime: DateTime<Local>) -> Self {
+        Self {
+            name: self.name.clone(),
+            desc: self.desc.clone(),
+            done: self.done,
+            do_at: Some(datetime),
+            do_by: self.do_by,
+            ignore_by: self.ignore_by
+        }
     }
-    pub fn do_by(&mut self, datetime: DateTime<Local>) {
-        self.do_by = Some(datetime);
+    pub fn do_by(&self, datetime: DateTime<Local>) -> Self {
+        Self {
+            name: self.name.clone(),
+            desc: self.desc.clone(),
+            done: self.done,
+            do_at: self.do_at,
+            do_by: Some(datetime),
+            ignore_by: self.ignore_by
+        }
     }
-    pub fn ignore_by(&mut self, datetime: DateTime<Local>) {
-        self.ignore_by = Some(datetime);
+    pub fn ignore_by(&mut self, datetime: DateTime<Local>) -> Self {
+        Self {
+            name: self.name.clone(),
+            desc: self.desc.clone(),
+            done: self.done,
+            do_at: self.do_at,
+            do_by: self.do_by,
+            ignore_by: Some(datetime)
+        }
     }
 
     pub fn get_name(&self) -> String { self.name.clone() }
