@@ -1,17 +1,16 @@
 // Using https://blog.logrocket.com/rust-and-tui-building-a-command-line-interface-in-rust/
 
-
-
 mod todo;
-use chrono::{Duration, DateTime, Utc, Local, TimeZone};
+use chrono::{Duration, Utc, Local, TimeZone};
 use crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 use crossterm::event;
-use todo::Todo;
+use todo::{Todo, ProgramData};
 use tui::layout::{Layout, Direction, Constraint, Alignment};
 use tui::style::{Color, Style, Modifier};
 use tui::text::{Spans, Span};
-use tui::widgets::{Paragraph, Block, Borders, BorderType, Tabs};
-use std::path::{Path, PathBuf};
+use tui::widgets::{Paragraph, Block, Borders, BorderType, Tabs, ListState, List, ListItem};
+use std::cmp::{max, min};
+use std::path::Path;
 use std::io;
 use tui::{backend::CrosstermBackend, Terminal};
 use std::sync::mpsc;
@@ -38,38 +37,76 @@ impl From<&Tab> for usize {
     }
 }
 
-fn task_view_widget(task: &Todo) -> Paragraph {
-    Paragraph::new( vec![
-        Spans::from(vec![Span::styled(
-            task.get_name(),
-            Style::default().add_modifier(Modifier::BOLD).add_modifier(Modifier::UNDERLINED).fg(Color::Blue)
-        )]),
-        Spans::from(vec![if task.is_done() 
-                        {Span::styled("Completed", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))} 
-                   else {Span::styled("Not Completed", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))}
-        ]),
-        Spans::from(vec![if let Some(due_date) = task.get_do_by() {
-            Span::styled(due_date.format("Due on %b %d, %Y at %H:%M").to_string(), 
-            Style::default().fg(if due_date < Local::now() && !task.is_done() {Color::Red} 
-                                else {Color::Green}))
-        } else {
-            Span::styled("No due date set", Style::default().fg(Color::DarkGray))
-        }]),
-        Spans::from(vec![Span::raw("")]),
-        Spans::from(vec![Span::raw(task.get_desc())]),
-        Spans::from(vec![Span::raw("")]),
-        Spans::from(vec![if let Some(do_date) = task.get_do_at() {
-            Span::styled(do_date.format("Scheduled for %b %d, %Y at %H:%M").to_string(), 
-            Style::default().fg(if do_date < Local::now() && !task.is_done() {Color::Red} 
-                                else {Color::Green}))
-        } else {
-            Span::styled("No date scheduled", Style::default().fg(Color::DarkGray))
-        }]),
-    ])
+fn task_view_widget(opt_task: Option<&Todo>) -> Paragraph {
+    if let Some(task) = opt_task {
+        Paragraph::new( vec![
+            Spans::from(vec![Span::styled(
+                task.get_name(),
+                Style::default().add_modifier(Modifier::BOLD).add_modifier(Modifier::UNDERLINED).fg(Color::Blue)
+            )]),
+            Spans::from(vec![if task.is_done() 
+                            {Span::styled("Completed", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))} 
+                    else {Span::styled("Not Completed", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))}
+            ]),
+            Spans::from(vec![if let Some(due_date) = task.get_do_by() {
+                Span::styled(due_date.format("Due on %b %d, %Y at %H:%M").to_string(), 
+                Style::default().fg(if task.is_late() && !task.is_done() {Color::Red} 
+                                    else {Color::Green}))
+            } else {
+                Span::styled("No due date set", Style::default().fg(Color::DarkGray))
+            }]),
+            Spans::from(vec![Span::raw(match task.get_time_taken() {
+                Some(dur) => if dur.num_hours() > 0 {format!("Takes {}h {}m", dur.num_hours(), dur.num_minutes() - 60 * dur.num_hours())} else {format!("Takes {}m", dur.num_minutes())},
+                None => String::from("No duration set")
+            })]),
+            Spans::from(vec![Span::raw("")]),
+            Spans::from(vec![Span::raw(task.get_desc())]),
+            Spans::from(vec![Span::raw("")]),
+            Spans::from(vec![if let Some(do_date) = task.get_do_at() {
+                Span::styled(do_date.format("Scheduled for %b %d, %Y at %H:%M").to_string(), 
+                Style::default().fg(if do_date < Local::now() && !task.is_done() {Color::Red} 
+                                    else {Color::Green}))
+            } else {
+                Span::styled("No date scheduled", Style::default().fg(Color::DarkGray))
+            }]),
+        ])
+    } else {
+        Paragraph::new(vec![Spans::from(vec![Span::styled("No Task Selected...", Style::default().fg(Color::DarkGray))])])
+    }
+    .block(Block::default()
+        .borders(Borders::all())
+        .border_type(BorderType::Rounded)
+    )
+}
+
+fn task_list_widget(tasks: &Vec<Todo>, selected_index: Option<usize>) -> List {
+    List::new::<Vec<ListItem>>(
+        tasks.iter().zip(0..tasks.len()).map(|(task, idx)| {
+            let style = 
+                    if task.is_done() {Style::default().fg(Color::Green)} 
+                    else if !task.is_late() {Style::default().fg(Color::Yellow)} 
+                    else {Style::default().fg(Color::Red)};
+            ListItem::new(
+                Spans::from(vec![Span::styled(
+                    task.get_name(), 
+                    if let Some(actual_index) = selected_index {if idx == actual_index {style.bg(Color::White)} else {style}} else {style}
+                )])
+            )
+        }).collect()
+    )
+    .block(
+        Block::default()
+        .borders(Borders::all())
+        .border_type(BorderType::Rounded)
+    )
 }
 
 fn main() {
-    let test_todo = Todo::new(String::from("Stuff"), String::from("Do stuff and things and more stuff")).do_by(Local.timestamp(1431648000, 0));
+    let mut program_data = ProgramData::get_data_or_blank(Path::new("/home/aprzn/.evertu"));
+    let test_todo = Todo::new(String::from("Stuff"), String::from("Do stuff and things and more stuff")).do_by(Local.timestamp(1431648000, 0)).time_taken(Duration::minutes(90));
+    let test_todo_2 = Todo::new(String::from("Stuff"), String::from("Do stuff and things and more stuff")).do_by(Local.timestamp(2431648000, 0)).time_taken(Duration::minutes(90));
+    program_data.add_task(test_todo);
+    program_data.add_task(test_todo_2);
     // println!("{}", test_todo.to_json().unwrap());
 
     // Input mode
@@ -107,6 +144,8 @@ fn main() {
 
     let mut current_tab = Tab::Tasks;
     let mut focused_task_index: Option<i32> = None;
+    let mut task_list_state = ListState::default();
+    task_list_state.select(None);
     // Rendering Loop
     loop {
         terminal.draw(|rect| {
@@ -154,8 +193,16 @@ fn main() {
 
             rect.render_widget(tabs, chunks[0]);
 
+            // Render a different main panel based on the current tab
             match current_tab {
-                Tab::Tasks => rect.render_widget(task_view_widget(&test_todo), chunks[1]),
+                Tab::Tasks => {
+                    let task_chunks = Layout::default()
+                                    .direction(Direction::Horizontal)
+                                    .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
+                                    .split(chunks[1]);
+                    rect.render_widget(task_view_widget(program_data.get_task_by_optional_index(task_list_state.selected())), task_chunks[1]);
+                    rect.render_stateful_widget(task_list_widget(program_data.get_tasks(), task_list_state.selected()), task_chunks[0], &mut task_list_state);
+                },
                 Tab::NewTask => { }
             }
         }).unwrap();
@@ -171,6 +218,20 @@ fn main() {
                 },
                 event::KeyCode::Char('h') => current_tab = Tab::Tasks,
                 event::KeyCode::Char('N') => current_tab = Tab::NewTask,
+                event::KeyCode::Up => {
+                    if let Some(selected) = task_list_state.selected() {
+                        if selected > 0 {task_list_state.select(Some(selected - 1));}
+                    } else {
+                        if program_data.get_tasks().len() > 0 { task_list_state.select(Some(0)); }
+                    }
+                },
+                event::KeyCode::Down => {
+                    if let Some(selected) = task_list_state.selected() {
+                        if selected + 1 < program_data.get_tasks().len() {task_list_state.select(Some(selected + 1))};
+                    } else {
+                        if program_data.get_tasks().len() > 0 { task_list_state.select(Some(0)); }
+                    }
+                },
                 _ => {}
             },
             Event::Tick => {}
