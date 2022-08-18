@@ -79,21 +79,20 @@ fn task_view_widget(opt_task: Option<&Todo>) -> Paragraph {
     )
 }
 
-fn task_list_widget(tasks: &Vec<Todo>, selected_index: Option<usize>) -> List {
+fn task_list_widget(tasks: &Vec<Todo>) -> List {
     List::new::<Vec<ListItem>>(
-        tasks.iter().zip(0..tasks.len()).map(|(task, idx)| {
-            let style = 
-                    if task.is_done() {Style::default().fg(Color::Green)} 
-                    else if !task.is_late() {Style::default().fg(Color::Yellow)} 
-                    else {Style::default().fg(Color::Red)};
+        tasks.iter().zip(0..tasks.len()).map(|(task, idx)| 
             ListItem::new(
                 Spans::from(vec![Span::styled(
                     task.get_name(), 
-                    if let Some(actual_index) = selected_index {if idx == actual_index {style.bg(Color::White)} else {style}} else {style}
+                    if task.is_done() {Style::default().fg(Color::Green)} 
+                    else if !task.is_late() {Style::default().fg(Color::Yellow)} 
+                    else {Style::default().fg(Color::Red)}
                 )])
             )
-        }).collect()
+        ).collect()
     )
+    .highlight_style(Style::default().bg(Color::White))
     .block(
         Block::default()
         .borders(Borders::all())
@@ -104,7 +103,7 @@ fn task_list_widget(tasks: &Vec<Todo>, selected_index: Option<usize>) -> List {
 fn main() {
     let mut program_data = ProgramData::get_data_or_blank(Path::new("/home/aprzn/.evertu"));
     let test_todo = Todo::new(String::from("Stuff"), String::from("Do stuff and things and more stuff")).do_by(Local.timestamp(1431648000, 0)).time_taken(Duration::minutes(90));
-    let test_todo_2 = Todo::new(String::from("Stuff"), String::from("Do stuff and things and more stuff")).do_by(Local.timestamp(2431648000, 0)).time_taken(Duration::minutes(90));
+    let test_todo_2 = Todo::new(String::from("Things"), String::from("Do *even more* stuff and things and stuff")).do_by(Local.timestamp(2431648000, 0)).time_taken(Duration::minutes(430));
     program_data.add_task(test_todo);
     program_data.add_task(test_todo_2);
     // println!("{}", test_todo.to_json().unwrap());
@@ -143,7 +142,6 @@ fn main() {
     terminal.clear().expect("Terminal clearing failed");
 
     let mut current_tab = Tab::Tasks;
-    let mut focused_task_index: Option<i32> = None;
     let mut task_list_state = ListState::default();
     task_list_state.select(None);
     // Rendering Loop
@@ -201,7 +199,7 @@ fn main() {
                                     .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
                                     .split(chunks[1]);
                     rect.render_widget(task_view_widget(program_data.get_task_by_optional_index(task_list_state.selected())), task_chunks[1]);
-                    rect.render_stateful_widget(task_list_widget(program_data.get_tasks(), task_list_state.selected()), task_chunks[0], &mut task_list_state);
+                    rect.render_stateful_widget(task_list_widget(program_data.get_tasks()), task_chunks[0], &mut task_list_state);
                 },
                 Tab::NewTask => { }
             }
@@ -229,9 +227,10 @@ fn main() {
                     if let Some(selected) = task_list_state.selected() {
                         if selected + 1 < program_data.get_tasks().len() {task_list_state.select(Some(selected + 1))};
                     } else {
-                        if program_data.get_tasks().len() > 0 { task_list_state.select(Some(0)); }
+                        if program_data.get_tasks().len() > 0 { task_list_state.select(Some(program_data.get_tasks().len() - 1)); }
                     }
                 },
+                event::KeyCode::Enter => if let Some(task) = program_data.get_task_by_optional_index_mut(task_list_state.selected()) {task.toggle_done()},
                 _ => {}
             },
             Event::Tick => {}

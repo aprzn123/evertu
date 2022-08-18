@@ -121,6 +121,10 @@ impl Todo {
         }
     }
 
+    pub fn toggle_done(&mut self) {
+        self.done = !self.done;
+    }
+
     pub fn get_name(&self) -> String { self.name.clone() }
     pub fn get_desc(&self) -> String { self.desc.clone() }
     pub fn is_done(&self) -> bool { self.done }
@@ -158,6 +162,16 @@ impl ProgramData {
         match index {
             Some(n) => if self.tasks.len() > n {
                 Some(&self.tasks[n])
+            } else {
+                None
+            }
+            None => None
+        }
+    }
+    pub fn get_task_by_optional_index_mut(&mut self, index: Option<usize>) -> Option<&mut Todo> {
+        match index {
+            Some(n) => if self.tasks.len() > n {
+                Some(&mut self.tasks[n])
             } else {
                 None
             }
