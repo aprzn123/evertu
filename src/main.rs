@@ -101,6 +101,29 @@ fn task_list_widget(tasks: &Vec<Todo>) -> List {
 }
 
 fn main() {
+    fn spawn_input_handler(tick_rate: Duration, tx: mpsc::Sender<Event<event::KeyEvent>>) {
+        thread::spawn(move || {
+            let mut last_tick = Utc::now();
+            loop {
+                // Timeout is duration until next tick
+                let timeout = tick_rate
+                    .checked_sub(&(Utc::now() - last_tick))
+                    .unwrap_or_else(|| Duration::seconds(0));
+                // Wait for events within that duration and send them over the mpsc channel
+                if event::poll(timeout.to_std().expect("Chrono duration incompatible with std duration")).expect("Event Poll Broken?") {
+                    if let CEvent::Key(key) = event::read().expect("Failed to read events") {
+                        tx.send(Event::Input(key)).expect("Failed to send events");
+                    }
+                }
+                // If no inputs received during that time, send a tick event
+                if (Utc::now() - last_tick) >= tick_rate {
+                    if let Ok(_) = tx.send(Event::Tick) {
+                        last_tick = Utc::now();
+                    }
+                }
+            }
+        });
+    }
     let mut program_data = ProgramData::get_data_or_blank(Path::new("/home/aprzn/.evertu"));
     let test_todo = Todo::new(String::from("Stuff"), String::from("Do stuff and things and more stuff")).do_by(Local.timestamp(1431648000, 0)).time_taken(Duration::minutes(90));
     let test_todo_2 = Todo::new(String::from("Things"), String::from("Do *even more* stuff and things and stuff")).do_by(Local.timestamp(2431648000, 0)).time_taken(Duration::minutes(430));
@@ -114,27 +137,7 @@ fn main() {
     let (tx, rx) = mpsc::channel();
     // Update every 200 ms *OR* when an input is received
     let tick_rate = Duration::milliseconds(200);
-    thread::spawn(move || {
-        let mut last_tick = Utc::now();
-        loop {
-            // Timeout is duration until next tick
-            let timeout = tick_rate
-                .checked_sub(&(Utc::now() - last_tick))
-                .unwrap_or_else(|| Duration::seconds(0));
-            // Wait for events within that duration and send them over the mpsc channel
-            if event::poll(timeout.to_std().expect("Chrono duration incompatible with std duration")).expect("Event Poll Broken?") {
-                if let CEvent::Key(key) = event::read().expect("Failed to read events") {
-                    tx.send(Event::Input(key)).expect("Failed to send events");
-                }
-            }
-            // If no inputs received during that time, send a tick event
-            if (Utc::now() - last_tick) >= tick_rate {
-                if let Ok(_) = tx.send(Event::Tick) {
-                    last_tick = Utc::now();
-                }
-            }
-        }
-    });
+    spawn_input_handler(tick_rate, tx);
 
     // Initialize terminal
     let backend = CrosstermBackend::new(io::stdout());
@@ -142,8 +145,6 @@ fn main() {
     terminal.clear().expect("Terminal clearing failed");
 
     let mut current_tab = Tab::Tasks;
-    let mut task_list_state = ListState::default();
-    task_list_state.select(None);
     // Rendering Loop
     loop {
         terminal.draw(|rect| {
@@ -198,7 +199,9 @@ fn main() {
                                     .direction(Direction::Horizontal)
                                     .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
                                     .split(chunks[1]);
-                    rect.render_widget(task_view_widget(program_data.get_task_by_optional_index(task_list_state.selected())), task_chunks[1]);
+                    rect.render_widget(task_view_widget(program_data.get_current_task()), task_chunks[1]);
+                    let mut task_list_state = ListState::default();
+                    task_list_state.select(program_data.get_idx());
                     rect.render_stateful_widget(task_list_widget(program_data.get_tasks()), task_chunks[0], &mut task_list_state);
                 },
                 Tab::NewTask => { }
@@ -214,23 +217,11 @@ fn main() {
                     terminal.show_cursor().unwrap();
                     break;
                 },
-                event::KeyCode::Char('h') => current_tab = Tab::Tasks,
+                event::KeyCode::Char('T') => current_tab = Tab::Tasks,
                 event::KeyCode::Char('N') => current_tab = Tab::NewTask,
-                event::KeyCode::Up => {
-                    if let Some(selected) = task_list_state.selected() {
-                        if selected > 0 {task_list_state.select(Some(selected - 1));}
-                    } else {
-                        if program_data.get_tasks().len() > 0 { task_list_state.select(Some(0)); }
-                    }
-                },
-                event::KeyCode::Down => {
-                    if let Some(selected) = task_list_state.selected() {
-                        if selected + 1 < program_data.get_tasks().len() {task_list_state.select(Some(selected + 1))};
-                    } else {
-                        if program_data.get_tasks().len() > 0 { task_list_state.select(Some(program_data.get_tasks().len() - 1)); }
-                    }
-                },
-                event::KeyCode::Enter => if let Some(task) = program_data.get_task_by_optional_index_mut(task_list_state.selected()) {task.toggle_done()},
+                event::KeyCode::Up | event::KeyCode::Char('e') => program_data.prev_task(),
+                event::KeyCode::Down | event::KeyCode::Char('n') => program_data.next_task(),
+                event::KeyCode::Enter => program_data.toggle_done(),
                 _ => {}
             },
             Event::Tick => {}

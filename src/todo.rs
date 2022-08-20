@@ -65,8 +65,8 @@ pub struct Todo {
 impl Todo {
     pub fn new(name: String, desc: String) -> Self {
         Self {
-            name: name,
-            desc: desc,
+            name,
+            desc,
             done: false,
             time_taken: None,
             do_at: None,
@@ -75,37 +75,22 @@ impl Todo {
         }
     }
 
-    pub fn do_at(&self, datetime: DateTime<Local>) -> Self {
+    pub fn do_at(self, datetime: DateTime<Local>) -> Self {
         Self {
-            name: self.name.clone(),
-            desc: self.desc.clone(),
-            done: self.done,
-            time_taken: None,
             do_at: Some(datetime),
-            do_by: self.do_by,
-            ignore_by: self.ignore_by
+            ..self
         }
     }
-    pub fn do_by(&self, datetime: DateTime<Local>) -> Self {
+    pub fn do_by(self, datetime: DateTime<Local>) -> Self {
         Self {
-            name: self.name.clone(),
-            desc: self.desc.clone(),
-            done: self.done,
-            time_taken: None,
-            do_at: self.do_at,
             do_by: Some(datetime),
-            ignore_by: self.ignore_by
+            ..self
         }
     }
-    pub fn ignore_by(&mut self, datetime: DateTime<Local>) -> Self {
+    pub fn ignore_by(self, datetime: DateTime<Local>) -> Self {
         Self {
-            name: self.name.clone(),
-            desc: self.desc.clone(),
-            done: self.done,
-            time_taken: None,
-            do_at: self.do_at,
-            do_by: self.do_by,
-            ignore_by: Some(datetime)
+            ignore_by: Some(datetime),
+            ..self
         }
     }
 
@@ -121,8 +106,11 @@ impl Todo {
         }
     }
 
-    pub fn toggle_done(&mut self) {
-        self.done = !self.done;
+    pub fn toggle_done(self) -> Self {
+        Self {
+            done: !self.done,
+            ..self
+        }
     }
 
     pub fn get_name(&self) -> String { self.name.clone() }
@@ -138,16 +126,17 @@ impl Todo {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProgramData {
-    tasks: Vec<Todo>
+    tasks: Vec<Todo>,
+    select_idx: Option<usize>
 }
 
 impl ProgramData {
     pub fn load_from_file(filename: &Path) -> Result<Self, io::Error> {
         let json = fs::read_to_string(filename)?;
-        Ok(ProgramData { tasks: serde_json::from_str(json.as_str())? })
+        Ok(serde_json::from_str(json.as_str())?)
     }
     pub fn new_blank() -> Self {
-        Self { tasks: vec![] }
+        Self { tasks: vec![], select_idx: None }
     }
 
     pub fn get_data_or_blank(fp: &Path) -> ProgramData {
@@ -156,7 +145,7 @@ impl ProgramData {
     }
 
     pub fn get_tasks(&self) -> &Vec<Todo> {&self.tasks}
-    pub fn get_tasks_mut(&mut self) -> &mut Vec<Todo> {&mut self.tasks}
+    pub fn get_idx(&self) -> Option<usize> {self.select_idx}
     pub fn add_task(&mut self, task: Todo) {self.tasks.push(task)}
     pub fn get_task_by_optional_index(&self, index: Option<usize>) -> Option<&Todo> {
         match index {
@@ -168,14 +157,37 @@ impl ProgramData {
             None => None
         }
     }
-    pub fn get_task_by_optional_index_mut(&mut self, index: Option<usize>) -> Option<&mut Todo> {
-        match index {
-            Some(n) => if self.tasks.len() > n {
-                Some(&mut self.tasks[n])
-            } else {
-                None
+    pub fn get_current_task(&self) -> Option<&Todo> {
+        self.select_idx.map(|idx| &self.tasks[idx])
+    }
+
+    pub fn next_task(&mut self) {
+        if let Some(idx) = self.select_idx {
+            if self.tasks.len() > idx + 1 {
+                self.select_idx = Some(idx + 1);
             }
-            None => None
+        } else {
+            if self.tasks.len() > 0 {
+                self.select_idx = Some(0);
+            }
+        }
+    }
+
+    pub fn prev_task(&mut self) {
+        if let Some(idx) = self.select_idx {
+            if idx > 0 {
+                self.select_idx = Some(idx - 1);
+            }
+        } else {
+            if self.tasks.len() > 0 {
+                self.select_idx = Some(0);
+            }
+        }
+    }
+
+    pub fn toggle_done(&mut self) {
+        if let Some(idx) = self.select_idx {
+            self.tasks[idx] = self.tasks[idx].clone().toggle_done();
         }
     }
 }
