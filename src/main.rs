@@ -1,7 +1,7 @@
 // Using https://blog.logrocket.com/rust-and-tui-building-a-command-line-interface-in-rust/
 
 mod todo;
-use chrono::{Duration, Utc, Local, TimeZone, NaiveTime};
+use chrono::{Duration, Utc, Local, TimeZone};
 use crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 use crossterm::event;
 use todo::{Todo, ProgramData};

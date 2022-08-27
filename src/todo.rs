@@ -1,8 +1,14 @@
 use std::{fs, io};
 use std::io::Write;
+use std::cmp::Ordering;
 use std::path::Path;
 use chrono::{DateTime, Local, Utc, TimeZone, serde::ts_seconds_option, Duration};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+enum SortingMethod {
+    None
+}
 
 pub fn serialize_local_dt<S>
     (dt: &Option<DateTime<Local>>, serializer: S) 
@@ -85,14 +91,10 @@ impl Todo {
             ..self
         }
     }
-    pub fn time_taken(&mut self, duration: Duration) -> Self {
+    pub fn time_taken(self, duration: Duration) -> Self {
         Self {
-            name: self.name.clone(),
-            desc: self.desc.clone(),
-            done: self.done,
             time_taken: Some(duration),
-            do_at: self.do_at,
-            do_by: self.do_by,
+            ..self
         }
     }
 
@@ -118,6 +120,8 @@ pub struct ProgramData {
     tasks: Vec<Todo>,
     select_idx: Option<usize>,
     show_done: bool,
+    visible: Vec<usize>,
+    sorting_method: SortingMethod,
 }
 
 impl ProgramData {
@@ -126,7 +130,7 @@ impl ProgramData {
         Ok(serde_json::from_str(json.as_str())?)
     }
     pub fn new_blank() -> Self {
-        Self { tasks: vec![], select_idx: None, show_done: false }
+        Self { tasks: vec![], select_idx: None, show_done: false, visible: vec![], sorting_method: SortingMethod::None }
     }
     pub fn get_data_or_blank(fp: &Path) -> ProgramData {
         if fp.is_file() {ProgramData::load_from_file(fp).expect("File cannot be read!")}
@@ -138,13 +142,23 @@ impl ProgramData {
         write!(&mut file, "{}", json.as_str())?;
         Ok(())
     }
+    fn update_visible(&mut self) {
+        fn order_tasks(sorting_method: SortingMethod, t1: &Todo, t2: &Todo) -> Ordering {
+            Ordering::Less
+        }
+        let mut visible_unsorted_enum: Vec<(usize, &Todo)> 
+            = self.tasks.iter()
+                        .enumerate()
+                        .filter(|(_idx, task)| self.is_visible(task)).collect();
+        visible_unsorted_enum.sort_by(|(_i1, t1), (_i2, t2)| order_tasks(self.sorting_method.clone(), t1, t2));
+        self.visible = visible_unsorted_enum.iter().map(|(idx, _)| *idx).collect();
+    }
 
-    pub fn get_visible_tasks(&self) -> Vec<&Todo> {self.tasks.iter().filter(|n| self.is_visible(n)).collect()}
+    pub fn get_visible_tasks(&self) -> Vec<&Todo> {self.visible.iter().map(|i| &self.tasks[*i]).collect()}
     pub fn get_task_refs(&self) -> Vec<&Todo> {self.tasks.iter().collect()}
     pub fn get_tasks(&self) -> &Vec<Todo> {&self.tasks}
-    pub fn get_idx(&self) -> Option<usize> {self.select_idx}
-    pub fn get_visible_idx(&self) -> Option<usize> {self.select_idx.map(|idx| {idx - self.tasks[0..idx].iter().filter(|n| !self.is_visible(&n)).count()})}
-    pub fn add_task(&mut self, task: Todo) {self.tasks.push(task)}
+    pub fn get_visible_idx(&self) -> Option<usize> {self.select_idx}
+    pub fn add_task(&mut self, task: Todo) {self.tasks.push(task); self.update_visible();}
     /*pub fn get_task_by_optional_index(&self, index: Option<usize>) -> Option<&Todo> {
         match index {
             Some(n) => if self.tasks.len() > n {
@@ -184,6 +198,7 @@ impl ProgramData {
     }
 
     pub fn next_task(&mut self) {
+        //TODO: COMPLETELY REWRITE
         if let Some(idx) = self.select_idx {
             if self.tasks.len() > idx + 1 {
                 self.select_idx = Some(self.next_visible_task_idx(idx));
@@ -196,6 +211,7 @@ impl ProgramData {
     }
 
     pub fn prev_task(&mut self) {
+        //TODO: COMPLETELY REWRITE
         if let Some(idx) = self.select_idx {
             if idx > 0 {
                 self.select_idx = Some(self.prev_visible_task_idx(idx));
@@ -212,8 +228,9 @@ impl ProgramData {
             self.tasks[idx] = self.tasks[idx].clone().toggle_done();
             if !self.show_done() {self.next_task()}
         }
+        self.update_visible();
     }
-    pub fn toggle_show_done(&mut self) {self.show_done = !self.show_done;}
+    pub fn toggle_show_done(&mut self) {self.show_done = !self.show_done; self.update_visible();}
 
     pub fn delete_current(&mut self) {
         if let Some(idx) = self.select_idx {
@@ -222,5 +239,6 @@ impl ProgramData {
                 self.select_idx = Some(idx - 1);
             }
         }
+        self.update_visible();
     }
 }
