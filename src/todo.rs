@@ -154,11 +154,22 @@ impl ProgramData {
         self.visible = visible_unsorted_enum.iter().map(|(idx, _)| *idx).collect();
     }
 
-    pub fn get_visible_tasks(&self) -> Vec<&Todo> {self.visible.iter().map(|i| &self.tasks[*i]).collect()}
-    pub fn get_task_refs(&self) -> Vec<&Todo> {self.tasks.iter().collect()}
-    pub fn get_tasks(&self) -> &Vec<Todo> {&self.tasks}
-    pub fn get_visible_idx(&self) -> Option<usize> {self.select_idx}
-    pub fn add_task(&mut self, task: Todo) {self.tasks.push(task); self.update_visible();}
+    pub fn get_visible_tasks(&self) -> Vec<&Todo> {
+        self.visible.iter().map(|i| &self.tasks[*i]).collect()
+    }
+    pub fn get_task_refs(&self) -> Vec<&Todo> {
+        self.tasks.iter().collect()
+    }
+    pub fn get_tasks(&self) -> &Vec<Todo> {
+        &self.tasks
+    }
+    pub fn get_visible_idx(&self) -> Option<usize> {
+        self.select_idx
+    }
+    pub fn add_task(&mut self, task: Todo) {
+        self.tasks.push(task);
+        self.update_visible();
+    }
     /*pub fn get_task_by_optional_index(&self, index: Option<usize>) -> Option<&Todo> {
         match index {
             Some(n) => if self.tasks.len() > n {
@@ -170,38 +181,30 @@ impl ProgramData {
         }
     }*/
     pub fn get_current_task(&self) -> Option<&Todo> {
-        self.select_idx.map(|idx| &self.tasks[idx])
+        self.select_idx.map(|idx| &self.tasks[self.visible[idx]])
     }
-    pub fn show_done(&self) -> bool {self.show_done}
+    pub fn show_done(&self) -> bool {
+        self.show_done
+    }
 
     fn is_visible(&self, task: &Todo) -> bool {
         if !self.show_done && task.is_done() {return false};
         true
     }
-
-    fn next_visible_task_idx(&self, idx: usize) -> usize {
-        let mut out = idx + 1;
-        while !self.is_visible(&self.tasks[out]) && out < self.tasks.len() - 1 {
-            out += 1;
+    fn clamp_range(&mut self) {
+        if self.visible.len() == 0 {
+            self.select_idx = None
+        } else if let Some(idx) = self.select_idx {
+            if idx >= self.visible.len() {
+                self.select_idx = Some(self.visible.len() - 1)
+            }
         }
-        if !self.is_visible(&self.tasks[out]) {return idx}
-        out
-    }
-
-    fn prev_visible_task_idx(&self, idx: usize) -> usize {
-        let mut out = idx - 1;
-        while !self.is_visible(&self.tasks[out]) && out > 0 {
-            out -= 1;
-        }
-        if !self.is_visible(&self.tasks[out]) {return idx}
-        out
     }
 
     pub fn next_task(&mut self) {
-        //TODO: COMPLETELY REWRITE
         if let Some(idx) = self.select_idx {
             if self.tasks.len() > idx + 1 {
-                self.select_idx = Some(self.next_visible_task_idx(idx));
+                self.select_idx = Some(idx + 1);
             }
         } else {
             if self.tasks.len() > 0 {
@@ -211,10 +214,9 @@ impl ProgramData {
     }
 
     pub fn prev_task(&mut self) {
-        //TODO: COMPLETELY REWRITE
         if let Some(idx) = self.select_idx {
             if idx > 0 {
-                self.select_idx = Some(self.prev_visible_task_idx(idx));
+                self.select_idx = Some(idx - 1);
             }
         } else {
             if self.tasks.len() > 0 {
@@ -225,12 +227,22 @@ impl ProgramData {
 
     pub fn toggle_done(&mut self) {
         if let Some(idx) = self.select_idx {
-            self.tasks[idx] = self.tasks[idx].clone().toggle_done();
-            if !self.show_done() {self.next_task()}
+            self.tasks[self.visible[idx]] = self.tasks[self.visible[idx]].clone().toggle_done();
+            self.update_visible();
+            if idx >= self.visible.len() {
+                if idx > 0 {
+                    self.select_idx = Some(idx - 1);
+                } else {
+                    self.select_idx = None;
+                }
+            }
         }
-        self.update_visible();
     }
-    pub fn toggle_show_done(&mut self) {self.show_done = !self.show_done; self.update_visible();}
+    pub fn toggle_show_done(&mut self) {
+        self.show_done = !self.show_done;
+        self.update_visible();
+        self.clamp_range();
+    }
 
     pub fn delete_current(&mut self) {
         if let Some(idx) = self.select_idx {

@@ -206,26 +206,39 @@ fn main() {
         }).unwrap();
 
         // Do stuff with user input
-        match rx.recv().expect("Error recieving event") {
-            Event::Input(event) => match event.code {
-                event::KeyCode::Char('a') => program_data.add_task(test_todo.clone()),
-                event::KeyCode::Char('d') => program_data.delete_current(),
-                event::KeyCode::Char('h') => program_data.toggle_show_done(),
-                event::KeyCode::Char('w') => program_data.save_to_file(file_loc).unwrap(),
-                event::KeyCode::Char('q') => {
-                    disable_raw_mode().unwrap();
-                    terminal.clear().unwrap();
-                    terminal.show_cursor().unwrap();
-                    break;
-                },
-                event::KeyCode::Char('T') => current_tab = Tab::Tasks,
-                event::KeyCode::Char('N') => current_tab = Tab::NewTask,
-                event::KeyCode::Up | event::KeyCode::Char('e') => program_data.prev_task(),
-                event::KeyCode::Down | event::KeyCode::Char('n') => program_data.next_task(),
-                event::KeyCode::Enter => program_data.toggle_done(),
-                _ => {}
+        match current_tab {
+            Tab::Tasks => {
+                match rx.recv().expect("Error recieving event") {
+                    Event::Input(event) => match event.code {
+                        event::KeyCode::Char('a') => program_data.add_task(test_todo.clone()),
+                        event::KeyCode::Char('d') => program_data.delete_current(),
+                        event::KeyCode::Char('h') => program_data.toggle_show_done(),
+                        event::KeyCode::Char('w') => program_data.save_to_file(file_loc).unwrap(),
+                        event::KeyCode::Char('q') => {
+                            disable_raw_mode().unwrap();
+                            terminal.clear().unwrap();
+                            terminal.show_cursor().unwrap();
+                            break;
+                        },
+                        event::KeyCode::Tab => current_tab = Tab::NewTask,
+                        event::KeyCode::Up | event::KeyCode::Char('e') => program_data.prev_task(),
+                        event::KeyCode::Down | event::KeyCode::Char('n') => program_data.next_task(),
+                        event::KeyCode::Enter => program_data.toggle_done(),
+                        _ => {}
+                    },
+                    Event::Tick => {}
+                }
             },
-            Event::Tick => {}
+            Tab::NewTask => {
+                match rx.recv().expect("Error recieving event") {
+                    Event::Input(event) => match event.code {
+                        event::KeyCode::Tab => current_tab = Tab::Tasks,
+                        event::KeyCode::Char(chr) => {}
+                        _ => {}
+                    },
+                    Event::Tick => {}
+                }
+            }
         }
     }
 }
